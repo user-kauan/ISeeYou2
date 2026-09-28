@@ -29,9 +29,7 @@ Câmera (celular / webcam / IP)
                                    Botoeira de Emergência
 ```
 
-**Por que Arduino + contato seco, e não Modbus TCP:** O principal motivo é que o CLP que tenho disponível não tem Modbus, então não seri possível ir por essa via, além disso, o método que estou utilizando funciona com qualquer CLP que tenha uma entrada digital, expandindo a capacidade de integração do projeto.
-
-**Princípio de projeto (fail-safe, a implementar):** o relé só permanece fechado enquanto o Arduino recebe o "estou vivo" (heartbeat) do PC. Se o programa travar ou o cabo soltar, o relé abre e o CLP interrompe a máquina. Depois de um corte, o retorno exige reset manual.
+**Por que Arduino + contato seco, e não Modbus TCP:** o principal motivo é que o CLP que tenho disponível não tem Modbus, então essa via não seria possível. Além disso, o contato seco funciona com praticamente qualquer CLP que tenha uma entrada digital, o que amplia a compatibilidade do projeto.
 
 **O caminho de segurança é local** (PC → Arduino → relé → CLP) e não depende de internet. O acesso remoto (Tailscale) serve só para visualização e demonstração.
 
@@ -88,8 +86,8 @@ Câmera (celular / webcam / IP)
 - [ ] Aquisição dos componentes elétricos/industriais
 - [ ] Lógica Ladder no CLP (leitura do contato seco e intertravamento fail-safe)
 - [ ] Integração Python ↔ Arduino ↔ CLP (contato seco)
-- [ ] Montagem do quadro elétrico e circuito de segurança (com profissional habilitado)
-- [ ] Testes integrados de ponta a ponta (primeiro com uma carga de teste, como uma lâmpada)
+- [ ] Montagem do quadro elétrico e circuito de segurança 
+- [ ] Testes integrados de ponta a ponta 
 
 ## 📅 Log de desenvolvimento
 

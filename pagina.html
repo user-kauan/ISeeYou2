@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0F1A21">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Monitor de EPI</title>
+<style>
+/* Paleta: cores de sinalização de segurança (verde = condição segura, amarelo = atenção, vermelho = proibição). */
+:root{
+  --chapa:#E3E7EA; --painel:#F6F7F8; --tinta:#15222C; --neutro:#55656F; --linha:#C4CCD2; --palco:#0F1A21;
+  --seguro:#0E7A46; --seguro-texto:#0B6A3B;
+  --atencao:#F5B800;
+  --perigo:#C92A20; --perigo-texto:#B3231A;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --chapa:#182229; --painel:#212D35; --tinta:#E9EFF3; --neutro:#9DAEB9; --linha:#33434E; --palco:#0A1116;
+    --seguro-texto:#5FD394; --perigo-texto:#FF8F86;
+  }
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html{
+  background:var(--chapa); color:var(--tinta); -webkit-text-size-adjust:100%;
+  font-family:"DIN Alternate","Bahnschrift","Roboto Condensed","sans-serif-condensed","Arial Narrow",system-ui,sans-serif;
+}
+body{margin:0}
+main{max-width:560px; margin:0 auto; padding-top:env(safe-area-inset-top, 0px); background:var(--chapa)}
+
+/* Imagem ao vivo: ocupa o topo. A altura maxima deixa espaco para a lista e os botoes sem rolar a tela. */
+.palco{
+  position:relative; background:var(--palco); aspect-ratio:3/4; min-height:220px;
+  max-height:calc(100vh - 290px); max-height:calc(100svh - 290px); overflow:hidden;
+}
+.palco img{display:block; width:100%; height:100%; object-fit:contain; -webkit-touch-callout:none; user-select:none}
+.palco.alerta::after{content:""; position:absolute; inset:0; border:5px solid var(--perigo); pointer-events:none}
+.inicio{position:absolute; inset:0; display:grid; place-items:center; padding:24px; text-align:center; color:#DCE5EA}
+.inicio p{margin:0 0 16px; font-size:clamp(16px, 4.2vw, 18px); line-height:1.4; max-width:30ch}
+.medidas{
+  position:absolute; left:8px; bottom:8px; padding:3px 10px; border-radius:999px;
+  background:rgba(0,0,0,.62); color:#fff; font-size:12px; font-variant-numeric:tabular-nums;
+}
+.aviso{
+  position:absolute; top:8px; left:8px; right:8px; padding:6px 12px; border-radius:6px;
+  background:rgba(0,0,0,.74); color:#fff; font-size:14px; line-height:1.3;
+}
+
+/* Regras: uma linha por regra, com barra lateral na cor do estado */
+.regras{list-style:none; margin:0; padding:0}
+.regra{
+  display:grid; grid-template-columns:auto 1fr auto; column-gap:10px; align-items:baseline;
+  padding:7px 14px 7px 12px; background:var(--painel);
+  border-left:8px solid var(--linha); border-bottom:1px solid var(--linha);
+  transition:border-color .2s;
+}
+.regra .nome{font-size:clamp(17px, 4.5vw, 19px); font-weight:700}
+.regra .nota{min-width:0; font-size:clamp(13px, 3.6vw, 15px); color:var(--neutro); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.regra .estado{font-size:clamp(15px, 4vw, 17px); font-weight:700; text-align:right; white-space:nowrap}
+.regra.ok{border-left-color:var(--seguro)}
+.regra.ok .estado{color:var(--seguro-texto)}
+.regra.verificando{border-left-color:var(--atencao)}
+.regra.alerta{border-left-color:var(--perigo)}
+.regra.alerta .estado, .regra.alerta .nota{color:var(--perigo-texto)}
+.regra.neutro .estado{color:var(--neutro)}
+
+/* Botoes */
+button{
+  font:inherit; font-weight:700; font-size:16px; min-height:48px; padding:0 14px; border-radius:6px;
+  border:2px solid var(--tinta); background:transparent; color:var(--tinta); cursor:pointer;
+  touch-action:manipulation; user-select:none;
+}
+button.principal{min-height:56px; font-size:clamp(18px, 5vw, 21px); padding:0 32px; background:#F6F7F8; color:#15222C; border-color:#F6F7F8}
+button:disabled{opacity:.55; cursor:default}
+button:active{transform:scale(.97)}
+button:focus-visible{outline:3px solid var(--atencao); outline-offset:2px}
+.ferramentas{display:flex; flex-wrap:wrap; gap:8px; padding:10px 12px}
+.ferramentas button{flex:1 1 auto; min-width:100px; white-space:nowrap; font-size:15px; padding:0 10px}
+
+/* Ocorrencias: recolhidas por padrao */
+.historico{padding:0 14px calc(env(safe-area-inset-bottom, 0px) + 12px)}
+.historico summary{padding:12px 0; font-size:16px; font-weight:700; cursor:pointer; touch-action:manipulation; user-select:none}
+#lista{list-style:none; margin:0; padding:0}
+#lista li{display:grid; grid-template-columns:5.2em 1fr; gap:10px; padding:8px 0; border-top:1px solid var(--linha); font-size:clamp(14px, 3.8vw, 15px)}
+#lista time{color:var(--neutro); font-variant-numeric:tabular-nums}
+#vazio{margin:0 0 6px; color:var(--neutro); font-size:14px}
+
+@media (prefers-reduced-motion: reduce){ .regra{transition:none} }
+</style>
+</head>
+<body>
+<main>
+  <section class="palco" id="palco">
+    <img id="out" alt="Imagem da câmera com as detecções" hidden>
+    <div class="inicio" id="inicio">
+      <div>
+        <p id="chamada">O celular envia a câmera ao PC e recebe a imagem de volta, com as detecções.</p>
+        <button class="principal" id="ini" type="button">Iniciar</button>
+      </div>
+    </div>
+    <div class="aviso" id="aviso" role="status" aria-live="polite" hidden></div>
+    <div class="medidas" id="medidas" hidden></div>
+  </section>
+
+  <ul class="regras" id="regras"></ul>
+
+  <div class="ferramentas" id="ferramentas" hidden>
+    <button id="troca" type="button">Trocar câmera</button>
+    <button id="som" type="button" aria-pressed="false">Som desligado</button>
+    <button id="parar" type="button">Parar</button>
+  </div>
+
+  <details class="historico">
+    <summary>Ocorrências <span id="cont">(0)</span></summary>
+    <ol id="lista"></ol>
+    <p id="vazio">Nenhuma ocorrência ainda. Os alertas aparecem aqui.</p>
+  </details>
+</main>
+
+<video id="cam" playsinline muted style="display:none"></video>
+<canvas id="cv" style="display:none"></canvas>
+
+<script>
+'use strict';
+const P = new URLSearchParams(location.search);
+const K = P.get('k') || '';
+const DEMO = P.get('demo') === '1';   // ?demo=1 mostra a pagina sem camera e sem servidor
+const MAXLADO = 640, QUALIDADE = 0.6, FPS_MAX = 20, RETENCAO_MS = 400;
+const EM_VOO_MAX = 3;   // quantos quadros podem estar "a caminho" do PC ao mesmo tempo
+
+const ORDEM = ['LUVAS', 'CAPACETE', 'OCULOS', 'COLETE'];
+const REGRAS = {
+  LUVAS:    {nome: 'Luvas',    viu: 'luva à vista',     falta: 'mão sem luva',        nenhum: 'Nenhuma mão'},
+  CAPACETE: {nome: 'Capacete', viu: 'capacete à vista', falta: 'cabeça sem capacete', nenhum: 'Nenhuma cabeça'},
+  OCULOS:   {nome: 'Óculos',   viu: 'óculos à vista',   falta: 'rosto sem óculos',    nenhum: 'Nenhum rosto'},
+  COLETE:   {nome: 'Colete',   viu: 'colete à vista',   falta: 'pessoa sem colete',   nenhum: 'Nenhuma pessoa'},
+};
+
+const $ = id => document.getElementById(id);
+const espera = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- funcoes puras: transformam os estados em textos ---------- */
+function lerEstados(txt) {
+  const o = {};
+  (txt || '').split(',').forEach(p => {
+    const i = p.indexOf('=');
+    if (i > 0) o[p.slice(0, i).trim()] = p.slice(i + 1).trim();
+  });
+  return o;
+}
+
+function classeDe(e) { return (e === 'ok' || e === 'verificando' || e === 'alerta') ? e : 'neutro'; }
+
+function textoRegra(n, e) {
+  const r = REGRAS[n];
+  switch (e) {
+    case 'alerta':      return {estado: 'Alerta',       nota: r.falta};
+    case 'verificando': return {estado: 'Confirmando',  nota: 'vi ' + r.falta};
+    case 'ok':          return {estado: 'Em ordem',     nota: r.viu};
+    case 'pequeno':     return {estado: 'Longe demais', nota: 'aproxime a câmera'};
+    case 'inativo':     return {estado: 'Aguardando',   nota: 'procura ' + r.falta};
+    default:            return {estado: r.nenhum,       nota: ''};
+  }
+}
+
+/* ---------- tela ---------- */
+const linhas = {};
+function montarRegras() {
+  ORDEM.forEach(n => {
+    const li = document.createElement('li');
+    li.className = 'regra neutro';
+    li.innerHTML = '<span class="nome"></span><span class="nota"></span><span class="estado"></span>';
+    li.querySelector('.nome').textContent = REGRAS[n].nome;
+    $('regras').appendChild(li);
+    linhas[n] = li;
+    pintarRegra(n, 'inativo');
+  });
+}
+function pintarRegra(n, e) {
+  const t = textoRegra(n, e);
+  linhas[n].className = 'regra ' + classeDe(e);
+  linhas[n].querySelector('.estado').textContent = t.estado;
+  linhas[n].querySelector('.nota').textContent = t.nota;
+}
+function aviso(texto) {   // mensagem discreta no topo da imagem; texto vazio esconde
+  $('aviso').textContent = texto || '';
+  $('aviso').hidden = !texto;
+}
+function falhaInicio(msg) {   // erro antes de a camera abrir: aparece no lugar do botao Iniciar
+  $('chamada').textContent = msg;
+  $('ini').textContent = 'Tentar de novo';
+  $('ini').disabled = false;
+}
+
+/* Mostra uma mudanca de estado so depois de ~0,4 s estavel (evita piscar); alerta liga e desliga na hora. */
+const exibido = {}, candidato = {}, anterior = {};
+function suavizar(novo, agora) {
+  ORDEM.forEach(n => {
+    if (!(n in novo)) return;
+    const atual = exibido[n], v = novo[n];
+    if (atual === undefined || atual === v || atual === 'alerta' || v === 'alerta') {
+      exibido[n] = v; delete candidato[n]; return;
+    }
+    const c = candidato[n];
+    if (!c || c.valor !== v) { candidato[n] = {valor: v, desde: agora}; return; }
+    if (agora - c.desde >= RETENCAO_MS) { exibido[n] = v; delete candidato[n]; }
+  });
+  return exibido;
+}
+
+/* Ocorrencias, som e vibracao */
+let audio = null, somLigado = false, total = 0;
+function beep() {
+  if (!somLigado || !audio) return;
+  try {
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.frequency.value = 880; g.gain.value = 0.2;
+    o.connect(g); g.connect(audio.destination);
+    o.start(); o.stop(audio.currentTime + 0.25);
+  } catch (e) {}
+}
+function ocorrencia(n, texto) {
+  const li = document.createElement('li');
+  li.innerHTML = '<time></time><span></span>';
+  li.children[0].textContent = new Date().toLocaleTimeString('pt-BR');
+  li.children[1].textContent = REGRAS[n].nome + ': ' + texto;
+  const lista = $('lista');
+  lista.insertBefore(li, lista.firstChild);
+  while (lista.children.length > 8) lista.removeChild(lista.lastChild);
+  $('vazio').hidden = true;
+  $('cont').textContent = '(' + (++total) + ')';
+}
+function registrar(exib) {
+  ORDEM.forEach(n => {
+    if (!(n in exib)) return;
+    const antes = anterior[n], agora = exib[n];
+    if (antes !== 'alerta' && agora === 'alerta') {
+      ocorrencia(n, 'alerta ligado (' + REGRAS[n].falta + ')');
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      beep();
+    } else if (antes === 'alerta' && agora !== 'alerta') {
+      ocorrencia(n, 'alerta encerrado');
+    }
+    anterior[n] = agora;
+  });
+}
+
+function atualizar(est) {
+  const exib = suavizar(est, performance.now());
+  ORDEM.forEach(n => {
+    linhas[n].hidden = !(n in exib);
+    if (n in exib) pintarRegra(n, exib[n]);
+  });
+  $('palco').classList.toggle('alerta', ORDEM.some(n => exib[n] === 'alerta'));   // moldura vermelha na imagem
+  registrar(exib);
+}
+
+const marcas = [];
+function medir(ms, extra) {
+  const t = performance.now();
+  marcas.push(t);
+  if (marcas.length > 10) marcas.shift();
+  const fps = marcas.length > 1 ? Math.round((marcas.length - 1) * 1000 / Math.max(1, t - marcas[0])) : 0;
+  $('medidas').hidden = false;
+  $('medidas').textContent = fps + ' quadros/s · ' + ms + ' ms' + (extra || '');
+}
+
+/* ---------- camera e comunicacao com o PC ---------- */
+const cam = $('cam'), cv = $('cv'), out = $('out');
+let frente = true;   // true = camera frontal (imagem espelhada, como um espelho); false = traseira
+let stream = null, wake = null, geracao = 0, ultimaUrl = null;
+
+const paraBlob = () => new Promise(r => cv.toBlob(r, 'image/jpeg', QUALIDADE));
+
+async function abrirCamera() {
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = await navigator.mediaDevices.getUserMedia(
+    {video: {facingMode: {ideal: frente ? 'user' : 'environment'}}, audio: false});
+  cam.srcObject = stream;
+  await cam.play();
+}
+function motivo(e) {
+  if (e && e.name === 'NotAllowedError') return 'Permita o acesso à câmera nas configurações do navegador.';
+  if (e && e.name === 'NotFoundError') return 'Nenhuma câmera encontrada neste aparelho.';
+  return 'Erro: ' + (e && e.name ? e.name : e);
+}
+function mostrarImagem(blob) {
+  const url = URL.createObjectURL(blob);
+  out.src = url;
+  out.hidden = false;
+  if (ultimaUrl) URL.revokeObjectURL(ultimaUrl);
+  ultimaUrl = url;
+}
+/* O palco assume a proporcao da imagem recebida (celular em pe = retrato; webcam de PC = paisagem). */
+out.addEventListener('load', () => {
+  if (out.naturalWidth && out.naturalHeight) {
+    $('palco').style.aspectRatio = out.naturalWidth + ' / ' + out.naturalHeight;
+  }
+});
+
+/* Manda o proximo quadro sem esperar a resposta do anterior chegar, mantendo ate EM_VOO_MAX
+"a caminho" ao mesmo tempo -- e o que permite passar de uns 7 quadros/s (esperando um por vez)
+para bem mais, mesmo com a mesma demora de rede por quadro. Cada quadro leva um numero (id);
+se um mais novo chegar antes de um mais velho (a rede pode entregar fora de ordem), o mais
+velho e descartado, para a tela nunca "voltar no tempo".
+*/
+let proximoId = 0, ultimoMostradoId = -1;
+
+async function enviarQuadro(blob, id, g, t0) {
+  try {
+    const resp = await fetch('/frame?k=' + encodeURIComponent(K), {method: 'POST', body: blob});
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const estados = lerEstados(resp.headers.get('X-Estados'));
+    const img = await resp.blob();
+    if (g !== geracao) return;
+    if (id > ultimoMostradoId) {   // descarta se um quadro mais novo ja foi mostrado primeiro
+      ultimoMostradoId = id;
+      mostrarImagem(img);
+      aviso('');
+      atualizar(estados);
+    }
+    medir(Math.max(1, Math.round(performance.now() - t0)));
+  } catch (e) {
+    if (g !== geracao) return;
+    aviso('Sem conexão com o PC. Tentando de novo… (' + e.message + ')');
+    await espera(300);
+  }
+}
+
+async function laco(g) {
+  const emAndamento = [];   // promises dos quadros que ainda nao voltaram
+  while (g === geracao) {
+    if (!cam.videoWidth) { await espera(100); continue; }
+
+    if (emAndamento.length >= EM_VOO_MAX) {
+      await Promise.race(emAndamento);   // espera so o primeiro que voltar, nao todos
+      continue;
+    }
+
+    const s = Math.min(1, MAXLADO / Math.max(cam.videoWidth, cam.videoHeight));
+    cv.width = Math.round(cam.videoWidth * s);
+    cv.height = Math.round(cam.videoHeight * s);
+    const ctx = cv.getContext('2d');
+    if (frente) ctx.setTransform(-1, 0, 0, 1, cv.width, 0);   // espelha (camera frontal)
+    else ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(cam, 0, 0, cv.width, cv.height);
+    const blob = await paraBlob();
+
+    const id = proximoId++;
+    const t0 = performance.now();
+    const p = enviarQuadro(blob, id, g, t0).then(() => {
+      emAndamento.splice(emAndamento.indexOf(p), 1);
+    });
+    emAndamento.push(p);
+
+    await espera(Math.max(0, 1000 / FPS_MAX));   // limite de velocidade, mesmo se a rede for muito rapida
+  }
+}
+
+/* ---------- modo demonstracao (?demo=1): sem camera e sem servidor ---------- */
+const ROTEIRO = [
+  [3, {LUVAS: 'sem-alvo', CAPACETE: 'sem-alvo', OCULOS: 'sem-alvo', COLETE: 'sem-alvo'}],
+  [4, {LUVAS: 'ok', CAPACETE: 'ok', OCULOS: 'ok', COLETE: 'ok'}],
+  [3, {LUVAS: 'verificando', CAPACETE: 'ok', OCULOS: 'ok', COLETE: 'ok'}],
+  [5, {LUVAS: 'alerta', CAPACETE: 'ok', OCULOS: 'verificando', COLETE: 'ok'}],
+  [3, {LUVAS: 'ok', CAPACETE: 'ok', OCULOS: 'ok', COLETE: 'ok'}],
+];
+function cenaDemo(c, W, H, est, t) {
+  const g = c.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#22343F'); g.addColorStop(1, '#101B22');
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  const vazio = Object.values(est).every(v => v === 'sem-alvo');
+  if (vazio) return;
+  const cx = W / 2 + Math.sin(t * 0.9) * 14, cy = H * 0.34;
+  c.fillStyle = '#3A5262'; c.beginPath(); c.arc(cx, cy, 62, 0, 7); c.fill();                       // cabeca
+  c.beginPath(); c.ellipse(cx, H * 0.78, 150, 190, 0, 0, 7); c.fill();                              // ombros
+  const caixa = (x, y, w, h, cor, rot) => {
+    c.strokeStyle = cor; c.lineWidth = 3; c.strokeRect(x, y, w, h);
+    c.fillStyle = cor; c.font = 'bold 17px sans-serif'; c.fillText(rot, x, y - 7);
+  };
+  const AMARELO = '#FFC800', VERDE = '#00C800';
+  caixa(cx - 78, cy - 88, 156, 150, AMARELO, 'head 0.93');
+  if (est.CAPACETE === 'ok') caixa(cx - 84, cy - 100, 168, 84, VERDE, 'helmet 0.88');
+  if (est.OCULOS === 'ok') caixa(cx - 56, cy - 22, 112, 36, VERDE, 'glasses 0.71');
+  const mx = W * 0.72 + Math.cos(t * 1.3) * 22, my = H * 0.62 + Math.sin(t * 1.7) * 18;
+  if (est.LUVAS === 'ok') caixa(mx - 44, my - 50, 88, 100, VERDE, 'gloves 0.84');
+  else if (est.LUVAS !== 'sem-alvo') caixa(mx - 44, my - 50, 88, 100, AMARELO, 'hands 0.9');
+  if (est.COLETE === 'ok') caixa(cx - 96, H * 0.5, 192, 190, VERDE, 'safety-vest 0.62');
+}
+async function demo(g) {
+  const W = 480, H = 640, tot = ROTEIRO.reduce((s, r) => s + r[0], 0), ini = performance.now();
+  cv.width = W; cv.height = H;
+  const c = cv.getContext('2d');
+  while (g === geracao) {
+    const t = (performance.now() - ini) / 1000;
+    let resto = t % tot, est = ROTEIRO[0][1];
+    for (const [dur, e] of ROTEIRO) { est = e; if (resto < dur) break; resto -= dur; }
+    cenaDemo(c, W, H, est, t);
+    out.src = cv.toDataURL('image/jpeg', 0.8);
+    out.hidden = false;
+    atualizar(est);
+    medir(42, ' · demonstração');
+    await espera(120);
+  }
+}
+
+/* ---------- botoes ---------- */
+async function iniciar() {
+  $('ini').disabled = true;
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.resume) audio.resume();
+  } catch (e) {}
+  if (!DEMO) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      falhaInicio('Abra esta página por HTTPS: o navegador só libera a câmera em páginas seguras.');
+      return;
+    }
+    try {
+      await abrirCamera();
+    } catch (e) {
+      falhaInicio('Não consegui abrir a câmera. ' + motivo(e));
+      return;
+    }
+    try { if (navigator.wakeLock) wake = await navigator.wakeLock.request('screen'); } catch (e) {}
+  }
+  $('inicio').hidden = true;
+  $('ferramentas').hidden = false;
+  $('troca').hidden = DEMO;
+  $('ini').disabled = false;
+  const g = ++geracao;
+  if (DEMO) demo(g); else laco(g);
+}
+
+async function trocar() {
+  frente = !frente;
+  try {
+    await abrirCamera();
+  } catch (e) {
+    aviso('Não consegui trocar de câmera. ' + motivo(e));
+    frente = !frente;
+    try { await abrirCamera(); } catch (e2) {}
+  }
+}
+
+function parar() {
+  geracao++;
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  try { if (wake) wake.release(); } catch (e) {}
+  wake = null;
+  ORDEM.forEach(n => { delete exibido[n]; delete candidato[n]; delete anterior[n]; linhas[n].hidden = false; pintarRegra(n, 'inativo'); });
+  $('palco').classList.remove('alerta');
+  aviso('');
+  $('chamada').textContent = 'Parado. Toque em Iniciar para continuar.';
+  $('ini').textContent = 'Iniciar';
+  $('inicio').hidden = false;
+  $('ferramentas').hidden = true;
+  $('medidas').hidden = true;
+}
+
+function alternarSom() {
+  somLigado = !somLigado;
+  $('som').textContent = somLigado ? 'Som ligado' : 'Som desligado';
+  $('som').setAttribute('aria-pressed', String(somLigado));
+  beep();
+}
+
+montarRegras();
+if (DEMO) $('chamada').textContent = 'Modo demonstração: a imagem e os alertas são simulados.';
+$('ini').addEventListener('click', iniciar);
+$('troca').addEventListener('click', trocar);
+$('parar').addEventListener('click', parar);
+$('som').addEventListener('click', alternarSom);
+</script>
+</body>
+</html>

@@ -94,7 +94,7 @@ Câmera (celular / webcam / IP)
 | Data | Atualização |
 |---|---|
 | _(01/09/2026)_ | Criação do repositório e definição da arquitetura |
-| _(17/09/2026)_ | Ambiente Python/CUDA, dataset SH17 preparado, treino do YOLO11s (mAP50 0,604), servidor remoto (celular → PC → celular) e teste de campo no Firjan SENAI Santa Cruz |
+| _(17/09/2026)_ | Ambiente Python/CUDA, dataset SH17 preparado, treino do YOLO11s (mAP50 0,604), servidor remoto (celular → PC → celular) |
 | _(21/09/2026)_ | Esqueleto (YOLO11-pose), interface web para celular e envio de quadros em pipeline |
 
 

@@ -2,104 +2,129 @@
   <img src="assets/logo.png" alt="Logo do ISeeYou2" width="220">
 </p>
 
-# 🛡️ ISeeYou2 — Sistema de Visão para Segurança Industrial (AIoT) 
+# 🛡️ ISeeYou2 — Totem de Segurança Industrial com Visão Computacional
 
-Última atualização: 28/09/2026
+Última atualização: 08/11/2026
 
-> Sistema de segurança industrial que integra Inteligência Artificial e Automação (AIoT) para prevenção de acidentes. O ISeeYou2 identifica em tempo real a ausência de Equipamentos de Proteção Individual (EPI) por visão computacional e, na etapa de integração, sinaliza e pode interromper o funcionamento de uma máquina por meio de um contato seco lido por um CLP.
+> Um totem que fica ao lado da máquina e só libera o uso quando o operador passa o crachá, tem permissão e está usando os EPIs (capacete, óculos e luva). Quem confere os EPIs é uma câmera com inteligência artificial. Durante o trabalho, a câmera continua de olho e uma cortina de laser protege a área da máquina. Se alguém tira o EPI ou invade a área, o supervisor é avisado e, se ele confirmar, a máquina para.
 >
-> Foi pensado como **camada complementar de supervisão**: não substitui proteções físicas nem procedimentos de segurança, e não é um dispositivo de segurança certificado.
+> É uma camada a mais de segurança: não substitui as proteções da máquina nem os procedimentos, e não é um equipamento de segurança certificado.
 
-**Status:** 🚧 Em desenvolvimento — módulo de visão computacional funcional e em testes de campo. A integração com hardware (Arduino / CLP) ainda não foi iniciada.
+**Status:** 🚧 Em desenvolvimento. A IA, a central e o protótipo de bancada (crachá + CLP) já funcionam. Agora é juntar a IA com a central e montar o totem definitivo.
+
+Projeto Integrador do curso Técnico em Eletromecânica (SENAI), feito para o desafio **Inova SENAI** a partir de uma demanda da empresa **Inear**.
 
 ---
 
-## 📌 Sobre o projeto
+## 📌 O problema
 
-O sistema funciona em um pipeline contínuo:
+A empresa é obrigada a exigir que o funcionário use o EPI (NR-6), mas não tem como ficar de olho em todas as máquinas o tempo todo. O ISeeYou2 faz essa conferência automaticamente e guarda o histórico.
+
+## 🏗️ Como o sistema é montado
 
 ```
-Câmera (celular / webcam / IP)
-   → YOLO11 EPI + YOLO11-pose (Python/OpenCV)
-   → Regras + janela de tolerância temporal
-   → Escalonamento de avisos
-   → Serial USB (heartbeat) → Arduino → Relé (contato seco)
-   → Entrada digital do CLP (Ladder) → Fail-Safe → Contator → Máquina
-                                             ↑
-                                   Botoeira de Emergência
+Crachá + Câmera com IA + Cortina de laser
+                 │
+                 ▼
+     Totem (microcontrolador) ──► CLP ──► Contator ──► Máquina
+                 │                 ▲
+                 ▼                 └── Botão de emergência
+       Central (PC: regras, IA, banco de dados)
+                 │
+        ┌────────┴────────┐
+  Tela do totem     Painel do supervisor
 ```
 
-**Por que Arduino + contato seco, e não Modbus TCP:** o principal motivo é que o CLP que tenho disponível não tem Modbus, então essa via não seria possível. Além disso, o contato seco funciona com praticamente qualquer CLP que tenha uma entrada digital, o que amplia a compatibilidade do projeto.
+Tudo funciona na rede local, sem depender de internet. O acesso remoto é só para visualizar e demonstrar.
 
-**O caminho de segurança é local** (PC → Arduino → relé → CLP) e não depende de internet. O acesso remoto (Tailscale) serve só para visualização e demonstração.
+## 🔁 Como funciona
 
-## ✅ O que já funciona
+```mermaid
+flowchart TD
+    A[Operador passa o crachá] --> B{Tem permissão nessa máquina?}
+    B -- Não --> B1[Acesso negado]
+    B -- Sim --> C[Câmera confere os EPIs]
+    C --> D{Está tudo certo?}
+    D -- Não --> D1[Totem avisa o que falta]
+    D1 --> A
+    D -- Sim --> E[Máquina liberada]
+    E --> F[Operador liga a máquina no botão]
+    F --> G{Durante o trabalho}
+    G -- Tirou o EPI ou invadiu a área --> H[Supervisor é avisado]
+    G -- Passou o crachá de novo --> K[Fim do turno, máquina bloqueada]
+    H --> I{Supervisor confirma?}
+    I -- Não --> G
+    I -- Sim --> J[CLP desliga a máquina]
+    J --> L[Religa só depois do reset]
+```
 
-- **Detecção de EPI:** capacete, óculos, luvas e colete, com YOLO11s treinado por transfer learning no dataset SH17.
-- **Regras de violação:** mão nua (`hands` sem `gloves`), cabeça sem capacete, rosto sem óculos e pessoa sem colete, decididas pela sobreposição das caixas detectadas.
-- **Janela de tolerância temporal:** o alerta só liga se a violação aparece em pelo menos 70% dos últimos 15 quadros, e só desliga quando cai a 30% ou menos. Isso evita disparos por uma detecção momentânea ou oclusão rápida.
-- **Esqueleto (YOLO11-pose):** um ponto colorido no corpo indica o estado de cada regra (verde = ok, amarelo = confirmando, vermelho = alerta). É só visualização e não altera a decisão do alerta.
-- **Celular como câmera:** uma página no navegador envia os quadros ao PC; o PC processa e devolve a imagem já com as detecções, por rede privada (Tailscale) com HTTPS.
+**Regras que não mudam:**
+- Se algo falhar, a máquina não é liberada.
+- A máquina nunca liga sozinha: quem dá a partida é sempre o operador, no botão.
+- Quem decide parar é uma pessoa, não a IA.
+- O botão de emergência funciona direto, sem depender do sistema.
 
-## 🧩 Componentes do sistema
+## 🧩 O que tem no projeto
 
-| Componente | Função |
+| Parte | O que faz |
 |---|---|
-| Câmera (celular pelo navegador, webcam ou IP) | Captura o vídeo da área de trabalho |
-| YOLO11s (EPI) + YOLO11n-pose (esqueleto), Python/OpenCV | Detecta EPIs e a postura do operador em tempo real |
-| Regras + janela de tolerância temporal | Decide o que é violação e evita falsos disparos por oclusão rápida ou variação de iluminação |
-| Escalonamento de avisos | Aviso 1 → aviso 2 → aviso 3 → corte, com intervalos definidos; zera se o EPI reaparece |
-| Arduino Nano | Recebe o heartbeat do PC por serial USB e comanda o relé; sem heartbeat, abre o relé |
-| Módulo relé (contato seco) | Sinaliza ao CLP a permissão para operar |
-| CLP | Lê o contato seco, roda a lógica Ladder e aciona a parada fail-safe |
-| Botoeira de Emergência (NR-12) | Corte manual direto, independente do processamento de IA |
-| Quadro elétrico | Organiza e protege a distribuição de energia (24V/220V) |
-| Contator industrial | Corta a alimentação principal da máquina. É acionado pelo CLP; o módulo de relé do Arduino não liga a carga diretamente |
-| Botoeira de reset | Exige validação manual da área antes de religar |
-| Sinalizador visual/sonoro | Feedback imediato do status da célula (seguro/parada) |
-| Rede privada (Tailscale) + servidor HTTPS | Acesso remoto para visualização e demonstração, fora do caminho de segurança |
+| Crachá RFID | Identifica o operador |
+| Câmera + IA (YOLO11) | Confere capacete, óculos e luva |
+| Cortina de laser | Avisa se alguém entra na área da máquina pela frente ou pelos lados |
+| Totem | Junta crachá, cortina e sinais do CLP, e mostra o resultado na tela, nos LEDs e no som |
+| Central | Decide quem pode usar a máquina, roda a IA e guarda o histórico |
+| Painel do supervisor | Mostra tudo ao vivo e é onde o supervisor confirma as paradas |
+| CLP + quadro elétrico | Liga e desliga a máquina com segurança (liga, desliga, reset, emergência e bypass) |
 
-## 📊 Resultados atuais
+## 👁️ A inteligência artificial
+
+- Detecta capacete, óculos, luvas e colete com o YOLO11, treinado no dataset SH17.
+- Só considera uma falta se ela aparece na maior parte dos últimos quadros, pra não disparar por um movimento rápido.
+- Mostra um esqueleto colorido no operador (verde ok, amarelo conferindo, vermelho falta), só como visualização.
+- Dá pra usar o celular como câmera.
+
+## 📊 Resultados até agora
 
 | Item | Valor |
 |---|---|
-| Dataset | SH17: 8.099 imagens e 75.994 anotações (6.479 treino / 1.620 validação) |
-| Modelo | YOLO11s, 640 px, 30 épocas, batch 8, GTX 1070 (cerca de 2,4 h) |
-| mAP50 (17 classes) | 0,604 (mAP50-95: 0,388) |
-| mAP50 por EPI | capacete 0,694 · óculos 0,629 · luvas 0,571 · colete 0,485 |
+| Dataset | SH17: 8.099 imagens |
+| Modelo | YOLO11s, 30 épocas |
+| Acerto geral (mAP50) | 0,604 |
+| Acerto por EPI (mAP50) | capacete 0,694 · óculos 0,629 · luvas 0,571 · colete 0,485 |
+| Bancada | Crachá → central → liberação no CLP funcionando |
+
+## 🔒 Privacidade
+
+- O sistema confere a segurança na máquina, não vigia pessoas: não mede produtividade e não grava o tempo todo.
+- Sem reconhecimento facial: quem identifica é o crachá.
+- O histórico serve pra orientar e treinar, não pra punir.
 
 ## 🗺️ Roadmap
 
-- [x] Definição da arquitetura do sistema
-- [x] Ambiente Python configurado (Ultralytics YOLO + OpenCV + PyTorch/CUDA)
-- [x] Teste de detecção genérica (pessoa): imagem de teste e câmera ao vivo
-- [x] Dataset de EPI: SH17 (público), redimensionado e dividido em treino/validação
-- [x] Fine-tuning do modelo YOLO11s para classes de EPI 
-- [x] Regras de violação e janela de tolerância temporal
-- [x] Rastreamento de esqueleto (YOLO11-pose) na visualização
-- [x] Acesso remoto: celular como câmera, processamento no PC (Tailscale + HTTPS) e interface web mobile
-- [x] Teste de campo em ambiente real 
-- [ ] Medição formal em modo sombra (falsos alarmes por hora e violações perdidas)
-- [ ] Coleta e anotação de dados do ambiente real (script de captura pronto) e retreino
-- [ ] Escalonamento de avisos (aviso 1 → 2 → 3 → corte) no Python
-- [ ] Firmware do Arduino (heartbeat via serial USB, relé, LEDs/buzzer, botão de reset)
-- [ ] Aquisição dos componentes elétricos/industriais
-- [ ] Lógica Ladder no CLP (leitura do contato seco e intertravamento fail-safe)
-- [ ] Integração Python ↔ Arduino ↔ CLP (contato seco)
-- [ ] Montagem do quadro elétrico e circuito de segurança 
-- [ ] Testes integrados de ponta a ponta 
+- [x] Arquitetura do sistema
+- [x] IA treinada para EPI e testada em campo
+- [x] Celular como câmera e acesso remoto
+- [x] Central, tela do totem e painel do supervisor
+- [x] Protótipo de bancada com crachá, tela, cortina e CLP
+- [ ] Ligar a IA na central
+- [ ] Treinar a IA com fotos do ambiente real
+- [ ] Cortina de laser completa
+- [ ] Totem definitivo
+- [ ] Quadro elétrico definitivo
+- [ ] Teste completo do sistema
 
 ## 📅 Log de desenvolvimento
 
 | Data | Atualização |
 |---|---|
 | _(01/09/2026)_ | Criação do repositório e definição da arquitetura |
-| _(17/09/2026)_ | Ambiente Python/CUDA, dataset SH17 preparado, treino do YOLO11s (mAP50 0,604), servidor remoto (celular → PC → celular) |
-| _(21/09/2026)_ | Esqueleto (YOLO11-pose), interface web para celular e envio de quadros em pipeline |
-
+| _(17/09/2026)_ | IA treinada e celular funcionando como câmera |
+| _(21/09/2026)_ | Esqueleto na tela e interface para celular |
+| _(03/11/2026)_ | Nova arquitetura com totem e central: painel do supervisor, tela do totem e protótipo da bancada integrado ao CLP |
+| _(07/11/2026)_ | Simulação 3D do sistema e planejamento das próximas fases |
 
 ---
 
-**Dataset:** [SH17](https://github.com/ahmadmughees/SH17dataset), licença CC BY-NC-SA 4.0 (uso não comercial).
+**Dataset:** [SH17](https://github.com/ahmadmughees/SH17dataset).
 
-> Este é um projeto autoral em desenvolvimento, documentado publicamente para fins de aprendizado e portfólio técnico.
+> Projeto autoral em desenvolvimento, documentado publicamente para aprendizado e portfólio.

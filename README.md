@@ -10,7 +10,7 @@
 >
 > É uma camada a mais de segurança: não substitui as proteções da máquina nem os procedimentos, e não é um equipamento de segurança certificado.
 
-**Status:** 🚧 Em desenvolvimento. A IA, a central e o protótipo de bancada (crachá + CLP) já funcionam. Agora é juntar a IA com a central e montar o totem definitivo.
+**Status:** 🚧 Em desenvolvimento. A IA já detecta os EPIs e o protótipo de bancada (crachá + CLP) já funciona, testado num CLP FX1N. A central, a tela do totem e o painel do supervisor ainda estão sendo construídos.
 
 Projeto Integrador do curso Técnico em Eletromecânica (SENAI), feito para o desafio **Inova SENAI** a partir de uma demanda da empresa **Inear**.
 
@@ -26,16 +26,33 @@ A empresa é obrigada a exigir que o funcionário use o EPI (NR-6), mas não tem
 Crachá + Câmera com IA + Cortina de laser
                  │
                  ▼
-     Totem (microcontrolador) ──► CLP ──► Contator ──► Máquina
-                 │                 ▲
-                 ▼                 └── Botão de emergência
-       Central (PC: regras, IA, banco de dados)
-                 │
-        ┌────────┴────────┐
-  Tela do totem     Painel do supervisor
+   Totem (ESP32) ──► CLP ──► Contator ──► Máquina
+       │   ▲          ▲
+       │   │          └── Botão de emergência
+       │   └── Arduino Nano (cortina de laser)
+       ▼
+ Central (PC: regras, IA, banco de dados)
+       │
+  ┌────┴─────────────┐
+Tela do totem    Painel do supervisor
 ```
 
-Tudo funciona na rede local, sem depender de internet. O acesso remoto é só para visualizar e demonstrar.
+- **ESP32:** o "cérebro" do totem. Lê o crachá, acende os LEDs, toca os avisos e manda os sinais pro CLP.
+- **Arduino Nano:** cuida só da cortina de laser e avisa o ESP32 quando algum feixe é cortado. Na bancada, um Nano faz o papel do totem inteiro enquanto o ESP32 não chega.
+- **Central:** um PC que decide quem pode usar a máquina, roda a IA e guarda o histórico.
+
+Tudo funciona na rede local, sem depender de internet.
+
+## 📡 Como as partes conversam
+
+| De → Para | Como |
+|---|---|
+| Totem ↔ Central | Cabo USB (serial), com mensagens curtas em texto (JSON) |
+| Arduino Nano → ESP32 | Serial, avisando quais feixes da cortina estão livres ou cortados |
+| Totem → CLP | Sinais de liga/desliga isolados por optoacoplador: "pode liberar" e "pare a máquina" |
+| CLP → Totem | Sinais de volta: "máquina ligada" e "bypass ativo" |
+| Central → Telas | Rede local (cabo ou Wi-Fi), pelo navegador |
+| Câmera → Central | Rede local (câmera IP) ou USB (webcam) |
 
 ## 🔁 Como funciona
 
@@ -64,17 +81,54 @@ flowchart TD
 - Quem decide parar é uma pessoa, não a IA.
 - O botão de emergência funciona direto, sem depender do sistema.
 
-## 🧩 O que tem no projeto
+## 🧩 Equipamentos e componentes
 
-| Parte | O que faz |
+**Totem**
+
+| Componente | Função |
 |---|---|
-| Crachá RFID | Identifica o operador |
-| Câmera + IA (YOLO11) | Confere capacete, óculos e luva |
-| Cortina de laser | Avisa se alguém entra na área da máquina pela frente ou pelos lados |
-| Totem | Junta crachá, cortina e sinais do CLP, e mostra o resultado na tela, nos LEDs e no som |
-| Central | Decide quem pode usar a máquina, roda a IA e guarda o histórico |
-| Painel do supervisor | Mostra tudo ao vivo e é onde o supervisor confirma as paradas |
-| CLP + quadro elétrico | Liga e desliga a máquina com segurança (liga, desliga, reset, emergência e bypass) |
+| ESP32-S3 | Controla o totem e conversa com a central e com o CLP |
+| Leitor RFID + crachás | Identifica o operador |
+| Câmera | Captura a imagem pra IA conferir os EPIs |
+| Tela | Mostra o nome do operador e o que está faltando |
+| Fita de LED colorida | Mostra o resultado de longe (verde liberado, vermelho bloqueado) |
+| Luz de LED branca | Ilumina o operador na hora da verificação |
+| Módulo de áudio + alto-falante | Avisos de voz ("Coloque a luva") |
+| Optoacopladores | Isolam o totem dos 24 V do CLP |
+| Fonte e conversores de tensão | Alimentam tudo |
+
+**Cortina de laser**
+
+| Componente | Função |
+|---|---|
+| Arduino Nano | Lê os sensores da cortina |
+| Módulos laser | Formam os feixes em volta da máquina |
+| Sensores de luz | Percebem quando um feixe é cortado |
+| Postes | Seguram os lasers e sensores nas laterais e na frente |
+
+**Quadro elétrico**
+
+| Componente | Função |
+|---|---|
+| CLP FX1N | Lógica de segurança: liberação, partida, parada, reset e bypass |
+| Contator | Liga e desliga a força da máquina |
+| Botões liga, desliga e reset | Comando da máquina |
+| Botão de emergência | Para a máquina na hora, direto pelo circuito |
+| Chave de bypass | Libera a máquina sem o totem, pra manutenção |
+| Sinaleiros e buzzer | Mostram se a máquina está ligada, parada ou em bypass |
+| Disjuntor e fonte 24 V | Proteção e alimentação do comando |
+
+## 💻 Linguagens e ferramentas
+
+| Parte | Linguagem / ferramenta |
+|---|---|
+| IA e central | Python (com a biblioteca YOLO para a detecção) |
+| ESP32 e Arduino Nano | C++ (Arduino IDE) |
+| CLP | Ladder |
+| Tela do totem e painel (em construção) | HTML, CSS e JavaScript |
+| Banco de dados | SQLite |
+| Placa de circuito | KiCad |
+| Estrutura do totem | Fusion 360 |
 
 ## 👁️ A inteligência artificial
 
@@ -91,7 +145,7 @@ flowchart TD
 | Modelo | YOLO11s, 30 épocas |
 | Acerto geral (mAP50) | 0,604 |
 | Acerto por EPI (mAP50) | capacete 0,694 · óculos 0,629 · luvas 0,571 · colete 0,485 |
-| Bancada | Crachá → central → liberação no CLP funcionando |
+| Bancada | Crachá → liberação no CLP funcionando, testado num FX1N |
 
 ## 🔒 Privacidade
 
@@ -104,12 +158,13 @@ flowchart TD
 - [x] Arquitetura do sistema
 - [x] IA treinada para EPI e testada em campo
 - [x] Celular como câmera e acesso remoto
-- [x] Central, tela do totem e painel do supervisor
-- [x] Protótipo de bancada com crachá, tela, cortina e CLP
+- [x] Protótipo de bancada com crachá, tela LCD, cortina e CLP
+- [ ] Central (em construção)
+- [ ] Tela do totem e painel do supervisor (em construção)
 - [ ] Ligar a IA na central
 - [ ] Treinar a IA com fotos do ambiente real
 - [ ] Cortina de laser completa
-- [ ] Totem definitivo
+- [ ] Totem definitivo com ESP32
 - [ ] Quadro elétrico definitivo
 - [ ] Teste completo do sistema
 
@@ -120,11 +175,11 @@ flowchart TD
 | _(01/09/2026)_ | Criação do repositório e definição da arquitetura |
 | _(17/09/2026)_ | IA treinada e celular funcionando como câmera |
 | _(21/09/2026)_ | Esqueleto na tela e interface para celular |
-| _(03/11/2026)_ | Nova arquitetura com totem e central: painel do supervisor, tela do totem e protótipo da bancada integrado ao CLP |
+| _(03/11/2026)_ | Nova arquitetura com totem e central. Protótipo da bancada conversando com o CLP FX1N |
 | _(07/11/2026)_ | Simulação 3D do sistema e planejamento das próximas fases |
 
 ---
 
-**Dataset:** [SH17](https://github.com/ahmadmughees/SH17dataset).
+**Dataset:** [SH17](https://github.com/ahmadmughees/SH17dataset), licença CC BY-NC-SA 4.0 (uso não comercial).
 
 > Projeto autoral em desenvolvimento, documentado publicamente para aprendizado e portfólio.
